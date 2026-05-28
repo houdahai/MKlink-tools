@@ -484,6 +484,10 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(740, 550)
         self.config_path = os.path.expanduser("~/.mklink_helper_config.json")
         
+        # 如果是普通权限运行，必须激活顶级主窗口自身的 OLE 拖放注册，从而让所有子控件的拖拽机制全线激活！
+        is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+        self.setAcceptDrops(not is_admin)
+        
         self.init_ui()
         self.load_config()
         self.bind_config_signals()
