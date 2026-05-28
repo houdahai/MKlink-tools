@@ -68,14 +68,21 @@ def run_as_normal_user(args=None):
         print(f"降权启动失败: {e}")
         return False
 
+def run_command_elevated(cmd_str):
+    """
+    通过 Windows UAC 提权静默拉起 cmd.exe 异步执行一条特权指令
+    """
+    try:
+        # lpOperation: "runas" 触发提权，SW_HIDE(0) 隐藏窗口
+        ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f'/c {cmd_str}', None, 0)
+        return ret > 32
+    except:
+        return False
+
 def create_link(link_type, link_path, target_path):
     """
     创建 Windows mklink 链接。
-    link_type: 'junction' (目录联接), 'symlink_dir' (目录符号链接), 'symlink_file' (文件符号链接), 'hardlink' (文件硬链接)
-    link_path: 欲创建的链接路径 (虚拟路径，原本应不存在)
-    target_path: 真实的源文件/文件夹路径
-    
-    返回: (success_bool, message_str)
+    支持在普通非管理员权限下进行按需 UAC 提权执行！
     """
     # 格式化路径，Windows 命令行更喜欢反斜杠
     link_path = os.path.abspath(link_path).replace('/', '\\')
@@ -86,52 +93,75 @@ def create_link(link_type, link_path, target_path):
         return False, f"错误: 目标路径不存在: {target_path}"
     
     if os.path.exists(link_path):
-        return False, f"错误: 链接路径已存在: {link_path}\n请先删除或重命名该位置的同名文件/文件夹。"
+        return False, f"错误: 链接路径已存在: {link_path}\n请先删除或重命名该位置 of 同名文件/文件夹。"
 
-    # 判断类型并拼装 mklink 参数
-    # mklink 是 cmd 的内置命令，需要通过 cmd.exe /c 来调用
+    # 判断类型并拼装原生 mklink 参数
     if link_type == 'junction':
-        # 目录联接 (Junction /J)，通常不需要管理员权限
-        cmd = f'cmd.exe /c mklink /J "{link_path}" "{target_path}"'
+        raw_cmd = f'mklink /J "{link_path}" "{target_path}"'
     elif link_type == 'symlink_dir':
-        # 目录符号链接 (Symlink /D)，通常需要管理员权限
-        if not is_admin():
-            return False, "创建目录符号链接需要管理员权限，请点击上方“提权运行”后重试。"
-        cmd = f'cmd.exe /c mklink /D "{link_path}" "{target_path}"'
+        raw_cmd = f'mklink /D "{link_path}" "{target_path}"'
     elif link_type == 'symlink_file':
-        # 文件符号链接 (Symlink)，通常需要管理员权限
-        if not is_admin():
-            return False, "创建文件符号链接需要管理员权限，请点击上方“提权运行”后重试。"
-        cmd = f'cmd.exe /c mklink "{link_path}" "{target_path}"'
+        raw_cmd = f'mklink "{link_path}" "{target_path}"'
     elif link_type == 'hardlink':
-        # 文件硬链接 (Hardlink /H)，不需要管理员权限
-        cmd = f'cmd.exe /c mklink /H "{link_path}" "{target_path}"'
+        raw_cmd = f'mklink /H "{link_path}" "{target_path}"'
     else:
         return False, f"未知链接类型: {link_type}"
 
+    # 检测普通非管理员下，符号链接默认需要管理员特权
+    needs_admin = (link_type in ('symlink_dir', 'symlink_file'))
+    
+    if needs_admin and not is_admin():
+        # 激活殿堂级 UAC 按需提权
+        print(f"🔑 [按需提权] 普通权限下创建符号链接，正在申请 UAC 授权: {raw_cmd}")
+        success = run_command_elevated(raw_cmd)
+        if success:
+            # 提权命令是异步执行的，稍微等待 250ms 确认链接是否生成
+            import time
+            time.sleep(0.25)
+            if is_reparse_point(link_path) or (link_type == 'symlink_file' and os.path.exists(link_path)):
+                return True, f"【按需提权成功】\n链接创建成功！\n命令: {raw_cmd}\n链接: {link_path} -> {target_path}"
+            else:
+                return False, "管理员授权已通过，但未检测到链接文件生成。\n可能由于目的地盘符限制或路径参数不支持。"
+        else:
+            return False, "管理员授权被拒绝或提权执行失败！"
+
+    # 如果是管理员权限，或者不需要提权：
+    # 拼装完整的命令，调用原生 subprocess 执行
+    full_cmd = f'cmd.exe /c {raw_cmd}'
     try:
-        # 执行命令，隐藏命令行窗口
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startupinfo.wShowWindow = subprocess.SW_HIDE
         
         result = subprocess.run(
-            cmd, 
+            full_cmd, 
             shell=True, 
             capture_output=True, 
             text=True, 
-            encoding='gbk', # Windows cmd 中文默认 gbk 编码
+            encoding='gbk',
             startupinfo=startupinfo
         )
         
         if result.returncode == 0:
-            return True, f"链接创建成功！\n命令: {cmd}\n链接: {link_path} -> {target_path}"
+            return True, f"链接创建成功！\n命令: {full_cmd}\n链接: {link_path} -> {target_path}"
         else:
             err_msg = result.stderr.strip() or result.stdout.strip() or f"未知错误 (Code: {result.returncode})"
-            return False, f"创建链接失败！\n原因: {err_msg}\n命令: {cmd}"
+            
+            # 特殊容错：如果普通权限下创建 Junction 被系统拒绝访问（如在系统目录 C:\Program Files 下）
+            if "拒绝访问" in err_msg and not is_admin():
+                print("🔑 [按需提权] 创建联接遭遇权限拒绝，正在申请 UAC 提权执行...")
+                success = run_command_elevated(raw_cmd)
+                if success:
+                    import time
+                    time.sleep(0.25)
+                    if is_reparse_point(link_path):
+                        return True, f"【按需提权成功】\n链接创建成功！\n命令: {raw_cmd}\n链接: {link_path} -> {target_path}"
+                return False, f"系统敏感路径写入被拒，且管理员授权未通过！原始错误: {err_msg}"
+                
+            return False, f"创建链接失败！\n原因: {err_msg}\n命令: {full_cmd}"
             
     except Exception as e:
-        return False, f"执行异常: {str(e)}\n{traceback.format_exc()}"
+        return False, f"执行建链命令发生异常: {str(e)}\n{traceback.format_exc()}"
 
 def safe_migrate_and_link(source_dir, dest_parent_dir, progress_callback=None):
     """
@@ -327,21 +357,38 @@ def get_link_target(path):
 def safe_remove_link_only(link_path):
     """
     【高安全机制】仅安全解除/删除链接壳子，100% 避开 rmtree，绝不伤及真实的物理数据！
+    支持在普通非管理员权限下进行按需 UAC 提权执行！
     """
     link_path = os.path.abspath(link_path)
     if not is_reparse_point(link_path):
         return False, "错误: 该路径不是一个符号链接或 Junction 联接，无法对其执行解除操作。"
 
+    is_dir = os.path.isdir(link_path)
     try:
         # 在 Windows 下，Junction 和目录 Symlink 是以特殊的目录形式存在，
         # 我们必须用 os.rmdir 删除它，这只会移去这个链接名，绝不会删除指向的实际数据文件！
         # 如果是文件链接，则用 os.remove
-        if os.path.isdir(link_path):
+        if is_dir:
             os.rmdir(link_path)
         else:
             os.remove(link_path)
         return True, f"成功安全解除链接: {link_path}\n真实存储的物理数据完好无损。"
     except Exception as e:
+        # 如果普通权限下因为敏感系统目录而删除被拒：
+        if not is_admin():
+            print("🔑 [按需提权] 解除链接遭遇权限拒绝，正在申请 UAC 提权执行...")
+            cmd = f'rmdir "{link_path}"' if is_dir else f'del /f /q "{link_path}"'
+            success = run_command_elevated(cmd)
+            if success:
+                import time
+                time.sleep(0.25)
+                if not os.path.exists(link_path):
+                    return True, f"【按需提权成功】\n已安全解除链接: {link_path}\n真实存储的物理数据完好无损。"
+                else:
+                    return False, "管理员授权已通过，但未成功移除链接外壳（链接仍存在，可能由于占用）。"
+            else:
+                return False, "管理员授权被拒绝或提权执行失败！"
+                
         return False, f"解除链接失败: {str(e)}"
 
 

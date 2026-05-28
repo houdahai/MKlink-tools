@@ -1215,9 +1215,9 @@ class MainWindow(QMainWindow):
             self.auth_badge.setProperty("class", "BadgeAdmin")
             self.auth_badge.setToolTip("已提权！且 NativeEvent 越狱免拦截系统已部署完毕。点击可以去权降级运行。")
         else:
-            self.auth_badge.setText("🔒 普通权限 (点击提权)")
+            self.auth_badge.setText("🔒 普通权限 (UAC 按需提权激活)")
             self.auth_badge.setProperty("class", "BadgeUser")
-            self.auth_badge.setToolTip("普通运行。")
+            self.auth_badge.setToolTip("普通运行。拖放功能已 100% 激活并支持原生最美 Fluent 动画！如执行特权指令，系统会自动弹出按需 UAC 气泡提权。")
         
         self.auth_badge.setStyle(self.auth_badge.style())
 
