@@ -707,11 +707,11 @@ class MainWindow(QMainWindow):
         
         nav_layout.addStretch()
         
-        # 权限角标
+        # 权限角标 (已隐藏，净化主导航栏界面)
         self.auth_badge = QPushButton(self)
         self.auth_badge.setObjectName("AuthBadge")
         self.auth_badge.clicked.connect(self.request_uac)
-        nav_layout.addWidget(self.auth_badge)
+        self.auth_badge.hide()
 
     def create_migration_tab(self):
         """创建“极速搬家”功能页面"""
@@ -818,10 +818,10 @@ class MainWindow(QMainWindow):
         type_layout.addWidget(QLabel("⭐ 链接类型 (Link Type):", self))
         self.adv_type_combo = QComboBox(self)
         self.adv_type_combo.addItems([
-            "目录联接 (Junction /J) - 无需管理员，最常用",
-            "目录符号链接 (Symlink /D) - 需管理员权限",
-            "文件符号链接 (File Symlink) - 需管理员权限",
-            "文件硬链接 (Hardlink /H) - 适合单个大文件"
+            "目录联接 (Junction /J) - 免提权 (最常用推荐)",
+            "目录符号链接 (Symlink /D) - 自动提权",
+            "文件符号链接 (File Symlink) - 自动提权",
+            "文件硬链接 (Hardlink /H) - 免提权"
         ])
         type_layout.addWidget(self.adv_type_combo, stretch=1)
         layout.addLayout(type_layout)
