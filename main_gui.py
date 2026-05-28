@@ -2,7 +2,7 @@ import os
 import sys
 import ctypes
 import ctypes.wintypes
-from PySide6.QtCore import Qt, QThread, Signal, QMimeData, QSize
+from PySide6.QtCore import Qt, QThread, Signal, QMimeData, QSize, QTimer
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QFont, QColor, QCursor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -1047,6 +1047,43 @@ class MainWindow(QMainWindow):
                     recursive_disable(child)
         recursive_disable(self)
 
+    def force_bypass_ole_admin(self):
+        """
+        【机关枪式物理越狱定时器】
+        在主窗口彻底显示后的黄金时间，连续强力强行拔掉 Qt 自动挂载的 OLE 注册，并彻底重新激活物理通道！
+        """
+        is_admin = mklink_engine.is_admin()
+        if not is_admin:
+            return
+            
+        hwnd = int(self.winId())
+        try:
+            # 1. 强制撤销主窗口的 OLE 注册
+            res = ctypes.windll.ole32.RevokeDragDrop(hwnd)
+            hex_res = hex(res & 0xffffffff)
+            
+            # 2. 重新允许物理拖放消息
+            ctypes.windll.shell32.DragAcceptFiles(hwnd, True)
+            
+            # 3. 部署 Windows 窗口级 UIPI 消息豁免
+            user32 = ctypes.windll.user32
+            user32.ChangeWindowMessageFilterEx(hwnd, 0x0233, 1, None)
+            user32.ChangeWindowMessageFilterEx(hwnd, 0x004A, 1, None)
+            user32.ChangeWindowMessageFilterEx(hwnd, 0x0049, 1, None)
+            
+            # 4. 同时部署 Windows 进程级 UIPI 消息豁免
+            user32.ChangeWindowMessageFilter(0x0233, 1)
+            user32.ChangeWindowMessageFilter(0x004A, 1)
+            user32.ChangeWindowMessageFilter(0x0049, 1)
+            
+            print(f"✔ [越狱定时器] HWND: {hwnd} | RevokeDragDrop HRESULT: {hex_res} | 物理接收已强制覆盖激活！")
+            
+            # 如果成功撤销了 OLE (res == 0) 或者是首次注册并注销，记录成功日志
+            if res == 0:
+                self.log(f"🛡️ [OLE 越狱] 延迟物理降级通道已成功强行激活 (RevokeDragDrop={hex_res})！", "#2ecc71")
+        except Exception as e:
+            print("❌ 越狱定时器执行异常:", e)
+
     def showEvent(self, event):
         super().showEvent(event)
         hwnd = int(self.winId())
@@ -1055,14 +1092,13 @@ class MainWindow(QMainWindow):
         if is_admin:
             # 管理员运行下强行禁用全窗口子控件的 OLE 拖放，迫使系统降级到物理 WM_DROPFILES，彻底突破 UIPI 拦截
             self.disable_all_subwidgets_accept_drops()
-            # 强行撤销主窗口的 OLE 注册，彻底解除 Qt 底层挂载的阻断，强迫 Windows 降级退化到物理接收
-            try:
-                ctypes.windll.ole32.RevokeDragDrop(hwnd)
-                self.log("🛡️ [OLE 越狱] 已强制撤销主窗口 OLE 注册 (RevokeDragDrop)，强行退化到物理通道！", "#2ecc71")
-                print("✔ [越狱] RevokeDragDrop 成功，物理通道已强行降级激活！")
-            except Exception as e:
-                self.log(f"⚠️ [OLE 越狱] 撤销 OLE 注册失败: {e}", "#e74c3c")
-                print("❌ [越狱] RevokeDragDrop 失败:", e)
+            
+            # 强行部署“机关枪式”多重延迟物理越狱，确保绝对不会被 Qt 底层后续注册覆盖！
+            QTimer.singleShot(50, self.force_bypass_ole_admin)
+            QTimer.singleShot(200, self.force_bypass_ole_admin)
+            QTimer.singleShot(500, self.force_bypass_ole_admin)
+            QTimer.singleShot(1000, self.force_bypass_ole_admin)
+            self.log("🛡️ [OLE 越狱] 提权模式下已强行部署多重延迟物理拖拽越狱机关枪！", "#2ecc71")
             
         # 1. 物理注册允许原生 Shell 拖拽文件消息
         try:
