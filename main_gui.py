@@ -1055,7 +1055,14 @@ class MainWindow(QMainWindow):
         if is_admin:
             # 管理员运行下强行禁用全窗口子控件的 OLE 拖放，迫使系统降级到物理 WM_DROPFILES，彻底突破 UIPI 拦截
             self.disable_all_subwidgets_accept_drops()
-            self.log("🛡️ [OLE 越狱] 管理员模式下已强行销毁 OLE 注册，激活 Native 物理拖放降级通道！", "#2ecc71")
+            # 强行撤销主窗口的 OLE 注册，彻底解除 Qt 底层挂载的阻断，强迫 Windows 降级退化到物理接收
+            try:
+                ctypes.windll.ole32.RevokeDragDrop(hwnd)
+                self.log("🛡️ [OLE 越狱] 已强制撤销主窗口 OLE 注册 (RevokeDragDrop)，强行退化到物理通道！", "#2ecc71")
+                print("✔ [越狱] RevokeDragDrop 成功，物理通道已强行降级激活！")
+            except Exception as e:
+                self.log(f"⚠️ [OLE 越狱] 撤销 OLE 注册失败: {e}", "#e74c3c")
+                print("❌ [越狱] RevokeDragDrop 失败:", e)
             
         # 1. 物理注册允许原生 Shell 拖拽文件消息
         try:
