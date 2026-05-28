@@ -479,7 +479,7 @@ class RestoreThread(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Windows MKlink 极速助手 v1.5 [建立链接持久越狱版]")
+        self.setWindowTitle("Windows MKlink 极速助手")
         self.resize(960, 680)
         self.setMinimumSize(920, 620)
         self.config_path = os.path.expanduser("~/.mklink_helper_config.json")
