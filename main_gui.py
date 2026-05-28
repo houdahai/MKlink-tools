@@ -317,7 +317,7 @@ class ColorDragDropFrame(QFrame):
     def update_style(self):
         style = f"""
         #ColorDragZone {{
-            border: 2px dashed {self.color_hex}44;
+            border: 2px dashed {self.color_hex}aa;
             border-radius: 8px;
             background-color: {self.bg_rgba};
         }}
@@ -399,7 +399,7 @@ class MiniDragZone(QFrame):
     def update_style(self):
         style = f"""
         #MiniDragZone {{
-            border: 1px dashed {self.color_hex}55;
+            border: 1.5px dashed {self.color_hex}bb;
             border-radius: 6px;
             background-color: {self.bg_rgba};
         }}
@@ -847,7 +847,7 @@ class MainWindow(QMainWindow):
         # 目标路径 (Target Path)
         layout.addWidget(QLabel("🎯 2. 数据真实存放的目标路径:", self))
         target_layout = QHBoxLayout()
-        self.adv_target_input = DragDropLineEdit(self, "直接拖入或使用右侧蓝色“真实数据源”拖放区...")
+        self.adv_target_input = DragDropLineEdit(self, "直接拖入文件夹，或使用下方微型拖拽热区快速录入...")
         self.adv_target_input.path_dropped.connect(self.on_adv_target_dropped)
         
         self.adv_target_browse = QPushButton("浏览...", self)
@@ -1104,24 +1104,24 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(1000, self.force_bypass_ole_admin)
             self.log("🛡️ [OLE 越狱] 提权模式下已强行部署多重延迟物理拖拽越狱机关枪！", "#2ecc71")
             
-        # 1. 物理注册允许原生 Shell 拖拽文件消息
-        try:
-            ctypes.windll.shell32.DragAcceptFiles(hwnd, True)
-            print("✔ 原生 HWND 拖拽接收启动")
-        except Exception as e:
-            print("DragAcceptFiles 激活失败:", e)
-            
-        # 2. 内核过滤豁免 UIPI 安全特权隔离白名单
-        try:
-            user32 = ctypes.windll.user32
-            # 0x0233 = WM_DROPFILES, 0x004A = WM_COPYDATA, 0x0049 = WM_COPYGLOBALMEM
-            user32.ChangeWindowMessageFilterEx(hwnd, 0x0233, 1, None)
-            user32.ChangeWindowMessageFilterEx(hwnd, 0x004A, 1, None)
-            user32.ChangeWindowMessageFilterEx(hwnd, 0x0049, 1, None)
-            print("✔ 内核级 HWND 豁免过滤器已部署")
-        except Exception as e:
-            print("ChangeWindowMessageFilterEx 失败，使用进程级豁免:", e)
-            exempt_drag_drop_uipi()
+            # 1. 物理注册允许原生 Shell 拖拽文件消息 (仅在提权下运行，普通权限绝不运行，防止 OLE 冲突)
+            try:
+                ctypes.windll.shell32.DragAcceptFiles(hwnd, True)
+                print("✔ 原生 HWND 物理拖拽接收启动")
+            except Exception as e:
+                print("DragAcceptFiles 激活失败:", e)
+                
+            # 2. 内核过滤豁免 UIPI 安全特权隔离白名单
+            try:
+                user32 = ctypes.windll.user32
+                # 0x0233 = WM_DROPFILES, 0x004A = WM_COPYDATA, 0x0049 = WM_COPYGLOBALMEM
+                user32.ChangeWindowMessageFilterEx(hwnd, 0x0233, 1, None)
+                user32.ChangeWindowMessageFilterEx(hwnd, 0x004A, 1, None)
+                user32.ChangeWindowMessageFilterEx(hwnd, 0x0049, 1, None)
+                print("✔ 内核级 HWND 豁免过滤器已部署")
+            except Exception as e:
+                print("ChangeWindowMessageFilterEx 失败，使用进程级豁免:", e)
+                exempt_drag_drop_uipi()
 
     def nativeEvent(self, event_type, message):
         """
