@@ -480,8 +480,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Windows MKlink 极速助手 v1.5 [建立链接持久越狱版]")
-        self.resize(800, 600)
-        self.setMinimumSize(740, 550)
+        self.resize(960, 680)
+        self.setMinimumSize(920, 620)
         self.config_path = os.path.expanduser("~/.mklink_helper_config.json")
         
         # 如果是普通权限运行，必须激活顶级主窗口自身的 OLE 拖放注册，从而让所有子控件的拖拽机制全线激活！
